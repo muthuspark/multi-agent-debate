@@ -1,0 +1,65 @@
+# Product Requirements Document: Minimal Multi-Agent Debate System
+
+## Overview
+A lightweight system that orchestrates a debate between two AI agents on a given question, with a third agent acting as judge to determine the most accurate answer.
+
+## Core Functionality
+
+### 1. Agent Configuration
+- **Debaters**: Two agents with distinct reasoning approaches
+- **Judge**: One agent to evaluate arguments and determine the final answer
+- **Moderator**: Simple mechanism to initiate debate and transition between phases
+
+### 2. Debate Structure
+- **Initialization**: System presents the debate question to all agents
+- **Opening Arguments**: Each debater presents initial position (1 round)
+- **Rebuttal Phase**: Each debater responds to opposing arguments (2 rounds)
+- **Conclusion**: Each debater provides final summary (1 round)
+- **Judgment**: Judge evaluates arguments and determines most accurate answer
+
+### 3. Technical Requirements
+- Use langgraph library for agent orchestration
+- Single API endpoint for initiating debates
+- JSON-formatted inputs and outputs
+- Maximum 5 total rounds of debate
+
+## Input
+```json
+{
+  "question": "Is nuclear energy a good solution to climate change?",
+  "context": "Optional background information relevant to the question"
+}
+```
+
+## Output
+```json
+{
+  "debate_log": [
+    {"agent": "agent1", "message": "...", "round": 1},
+    {"agent": "agent2", "message": "...", "round": 1},
+    ...
+  ],
+  "final_judgment": "Based on the arguments presented, nuclear energy is...",
+  "reasoning": "The judge's reasoning for the decision",
+  "confidence": 0.85
+}
+```
+
+## Implementation Path
+1. Set up langgraph environment with required dependencies
+2. Configure the three agents with appropriate system prompts
+3. Implement the debate orchestration flow
+4. Add simple logging to capture the debate history
+5. Create judgment extraction from the judge's final response
+
+## Success Criteria
+- Debate completes within 2 minutes
+- Judge consistently produces reasoned judgments with justification
+- System handles a variety of question types without errors
+- Output is structured consistently for easy processing
+
+## Limitations
+- Limited to text-based reasoning (no external tool use)
+- No real-time fact checking
+- Maximum context length determined by underlying model
+- No persistent memory between separate debates
