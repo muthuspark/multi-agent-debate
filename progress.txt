@@ -428,3 +428,321 @@
   "decision": "Generate five new candidates after this commit",
   "commitMessage": "ralph: Run complete debates through Codex CLI without an API key\n\nRalph-Run: 20261019034023335-908c54e8\nRalph-Iteration: 1"
 }
+
+[2026-10-19T03:47:52.109Z] 20261019034023335-908c54e8 — Phase started
+{
+  "iteration": 2,
+  "phase": "discover"
+}
+
+[2026-10-19T03:48:55.656Z] 20261019034023335-908c54e8 — Five candidates generated and ranked
+{
+  "formula": "mustDo.productManager.score + mustDo.subjectMatterExpert.score",
+  "tieBreaker": "impact * confidence / (effort * risk), higher impact, lower effort, proposal order",
+  "ranked": [
+    {
+      "title": "Remove the example runner’s API-key gate",
+      "category": "Keyless execution",
+      "rationale": "The library migration is complete, but the main example still blocks users without an Anthropic key. Removing this gate makes the existing Codex integration accessible through the documented entry point. The blocker is established by source inspection; adoption impact is unmeasured.",
+      "evidence": [
+        "examples/run_debate.py:45-51 loads dotenv and returns before constructing the orchestrator when ANTHROPIC_API_KEY is absent.",
+        "src/debate_graph.py:41-49 already constructs CodexCLI without an API key.",
+        "Supplied iteration history explicitly identifies the example runner’s authentication gate as unfinished."
+      ],
+      "acceptanceCriteria": [
+        "The example reaches Codex inference with ANTHROPIC_API_KEY, OPENAI_API_KEY, and CODEX_API_KEY unset.",
+        "An automated test runs the example against a fake Codex executable, verifies nine inference calls, and checks the printed transcript and saved judgment.",
+        "Tests redirect output to test-owned temporary storage and leave existing debate_output.json untouched.",
+        "The unchanged syntax check and existing adapter tests pass without live generation."
+      ],
+      "impact": 5,
+      "confidence": 5,
+      "effort": 1,
+      "risk": 1,
+      "mustDo": {
+        "productManager": {
+          "score": 5,
+          "rationale": "The primary entry point prevents keyless users from reaching any debate or learning outcome, directly contradicting the requested conversion."
+        },
+        "subjectMatterExpert": {
+          "score": 5,
+          "rationale": "Learners cannot inspect competing arguments or the judge’s reasoning through the example despite the working CLI backend.",
+          "domain": "LLM multi-agent debate for critical-thinking education and decision support"
+        }
+      },
+      "index": 0,
+      "score": 25,
+      "mustDoScore": 10
+    },
+    {
+      "title": "Replace API onboarding with a verified Codex CLI setup guide",
+      "category": "Onboarding",
+      "rationale": "Provide one accurate installation, sign-in, configuration, and first-run path. This is independently useful for library users and addresses substantive setup errors. Reduced setup failure is a hypothesis, not a measured result.",
+      "evidence": [
+        "README.md Installation step 4 requires an Anthropic key and .env setup.",
+        "README.md Configuration recommends Claude model names and a ChatAnthropic temperature implementation that no longer exists.",
+        "README.md Troubleshooting directs users back to ANTHROPIC_API_KEY.",
+        "src/debate_graph.py:41-48 exposes codex_executable and an optional model override.",
+        "The [official CLI reference](https://learn.chatgpt.com/docs/cli/reference) documents codex login status for checking saved authentication."
+      ],
+      "acceptanceCriteria": [
+        "README explains Codex CLI installation, interactive sign-in, authentication-status checking, and running without API-key environment variables.",
+        "Examples document the actual constructor options and default to the CLI-configured model.",
+        "Remove obsolete Claude setup, configuration, and cost claims rather than replacing them with unverified estimates.",
+        "A documented library example is exercised with a fake Codex executable and no API keys; documentation verification makes no paid calls."
+      ],
+      "impact": 4,
+      "confidence": 5,
+      "effort": 2,
+      "risk": 1,
+      "mustDo": {
+        "productManager": {
+          "score": 4,
+          "rationale": "The current instructions send new users down an incompatible setup path, creating significant friction before their first useful debate."
+        },
+        "subjectMatterExpert": {
+          "score": 4,
+          "rationale": "Accurate backend and model instructions are necessary for learners to reproduce the example and understand which system produced its arguments.",
+          "domain": "LLM multi-agent debate for critical-thinking education and decision support"
+        }
+      },
+      "index": 1,
+      "score": 10,
+      "mustDoScore": 8
+    },
+    {
+      "title": "Reject malformed judge results instead of inventing confidence",
+      "category": "Judgment correctness",
+      "rationale": "Validate the existing textual judgment contract before returning DebateOutput. This small compatibility safeguard requires no prompt or schema changes. Its parsing defects are demonstrated; their frequency with live Codex output is unknown.",
+      "evidence": [
+        "src/debate_graph.py:199-205 uses permissive regex parsing and defaults missing confidence to 0.5.",
+        "A read-only python3 reproduction of the existing expression returned 0.5 for unstructured text and parsed CONFIDENCE: 1.7 as 1.0.",
+        "tests/test_codex_cli.py supplies only one well-formed judge response for the successful nine-call debate."
+      ],
+      "acceptanceCriteria": [
+        "Missing or empty judgment and reasoning fields produce a clear invalid-judge-response error.",
+        "Confidence must be a complete finite numeric value within 0 through 1; values such as 1.7 cannot be partially accepted.",
+        "Missing confidence is reported as invalid rather than assigned 0.5.",
+        "Automated tests cover valid boundary values, missing fields, malformed confidence, and out-of-range values.",
+        "Existing valid fake-Codex debates preserve their output without modifying prompts or schemas."
+      ],
+      "impact": 4,
+      "confidence": 5,
+      "effort": 2,
+      "risk": 2,
+      "mustDo": {
+        "productManager": {
+          "score": 3,
+          "rationale": "A plausible but fabricated confidence score undermines the usefulness of the final result; live occurrence has not been established."
+        },
+        "subjectMatterExpert": {
+          "score": 4,
+          "rationale": "Learners may mistake parser defaults or truncated numbers for the judge’s expressed certainty, materially distorting evaluation of competing arguments.",
+          "domain": "LLM multi-agent debate for critical-thinking education and decision support"
+        }
+      },
+      "index": 3,
+      "score": 5,
+      "mustDoScore": 7
+    },
+    {
+      "title": "Make Codex execution failures actionable",
+      "category": "Failure recovery",
+      "rationale": "Translate missing-executable, timeout, and unsuccessful CLI execution into concise errors with relevant recovery guidance. Scope this increment to reporting and clean termination, without retries. Recovery benefits are inferred from the existing error path.",
+      "evidence": [
+        "src/codex_cli.py:25-29 discards stderr and exposes raw subprocess failures with a fixed 300-second timeout.",
+        "examples/run_debate.py:72 calls run_debate without handling execution errors.",
+        "tests/test_codex_cli.py verifies propagation of exit code 17 but does not verify useful recovery guidance."
+      ],
+      "acceptanceCriteria": [
+        "Missing executable errors explain how to install Codex or configure its executable path.",
+        "Timeouts and nonzero exits produce distinct errors; recognized authentication failures direct users to Codex sign-in.",
+        "Diagnostics are bounded and sanitized; prompts and credentials are not included in user-facing errors.",
+        "Automated fake-process tests cover missing executable, authentication failure, generic nonzero exit, and timeout without waiting five minutes.",
+        "Failures stop subsequent debate turns, clean temporary outputs, and cause the example to exit unsuccessfully."
+      ],
+      "impact": 4,
+      "confidence": 4,
+      "effort": 2,
+      "risk": 2,
+      "mustDo": {
+        "productManager": {
+          "score": 4,
+          "rationale": "Users encountering ordinary CLI setup or service failures currently lack a practical recovery path, preventing completion of their debate."
+        },
+        "subjectMatterExpert": {
+          "score": 3,
+          "rationale": "Clear execution failures help learners distinguish unavailable inference from an agent’s substantive response and resume their reasoning exercise.",
+          "domain": "LLM multi-agent debate for critical-thinking education and decision support"
+        }
+      },
+      "index": 2,
+      "score": 4,
+      "mustDoScore": 7
+    },
+    {
+      "title": "Run debate inference from a neutral temporary workspace",
+      "category": "Inference context isolation",
+      "rationale": "Set an explicit temporary working directory for each CLI invocation so debate execution does not inherit the caller’s project directory. This limits accidental project-context influence; it does not claim complete filesystem isolation. Actual answer contamination has not been measured.",
+      "evidence": [
+        "src/codex_cli.py:15-29 creates temporary output storage but passes neither cwd nor --cd to the child process.",
+        "The child therefore inherits the caller’s working directory.",
+        "The [official CLI reference](https://learn.chatgpt.com/docs/cli/reference) documents --cd as setting the workspace root before task execution.",
+        "Existing fake-executable tests record arguments and prompts but do not verify the child working directory."
+      ],
+      "acceptanceCriteria": [
+        "CLI inference uses an explicitly selected testable temporary working directory rather than the caller’s project directory.",
+        "Relative custom executable paths retain their intended resolution after the working-directory change.",
+        "Saved CLI authentication and optional model selection remain available without copying credentials.",
+        "Fake-executable tests verify the child directory, unchanged prompt delivery, and directory cleanup on success and failure.",
+        "Documentation states the limited working-directory boundary without claiming that read-only mode prohibits all reads or tools."
+      ],
+      "impact": 3,
+      "confidence": 3,
+      "effort": 2,
+      "risk": 2,
+      "mustDo": {
+        "productManager": {
+          "score": 3,
+          "rationale": "Predictable execution across caller directories supports dependable debate use, although user-visible contamination remains a hypothesis."
+        },
+        "subjectMatterExpert": {
+          "score": 3,
+          "rationale": "A neutral workspace reduces unintended contextual influence when learners expect arguments to derive from the supplied question, context, and debate history.",
+          "domain": "LLM multi-agent debate for critical-thinking education and decision support"
+        }
+      },
+      "index": 4,
+      "score": 2.25,
+      "mustDoScore": 6
+    }
+  ]
+}
+
+[2026-10-19T03:48:55.657Z] 20261019034023335-908c54e8 — Candidate selected
+{
+  "iteration": 2,
+  "candidate": {
+    "title": "Remove the example runner’s API-key gate",
+    "category": "Keyless execution",
+    "rationale": "The library migration is complete, but the main example still blocks users without an Anthropic key. Removing this gate makes the existing Codex integration accessible through the documented entry point. The blocker is established by source inspection; adoption impact is unmeasured.",
+    "evidence": [
+      "examples/run_debate.py:45-51 loads dotenv and returns before constructing the orchestrator when ANTHROPIC_API_KEY is absent.",
+      "src/debate_graph.py:41-49 already constructs CodexCLI without an API key.",
+      "Supplied iteration history explicitly identifies the example runner’s authentication gate as unfinished."
+    ],
+    "acceptanceCriteria": [
+      "The example reaches Codex inference with ANTHROPIC_API_KEY, OPENAI_API_KEY, and CODEX_API_KEY unset.",
+      "An automated test runs the example against a fake Codex executable, verifies nine inference calls, and checks the printed transcript and saved judgment.",
+      "Tests redirect output to test-owned temporary storage and leave existing debate_output.json untouched.",
+      "The unchanged syntax check and existing adapter tests pass without live generation."
+    ],
+    "impact": 5,
+    "confidence": 5,
+    "effort": 1,
+    "risk": 1,
+    "mustDo": {
+      "productManager": {
+        "score": 5,
+        "rationale": "The primary entry point prevents keyless users from reaching any debate or learning outcome, directly contradicting the requested conversion."
+      },
+      "subjectMatterExpert": {
+        "score": 5,
+        "rationale": "Learners cannot inspect competing arguments or the judge’s reasoning through the example despite the working CLI backend.",
+        "domain": "LLM multi-agent debate for critical-thinking education and decision support"
+      }
+    }
+  },
+  "mustDoScore": 10,
+  "score": 25,
+  "reason": "Highest score among candidates whose titles have not been completed, ranked by combined role must-do scores; ties use value/cost, higher impact, lower effort, then proposal order",
+  "excludedCompletedTitles": []
+}
+
+[2026-10-19T03:48:55.670Z] 20261019034023335-908c54e8 — Phase started
+{
+  "iteration": 2,
+  "phase": "implement"
+}
+
+[2026-10-19T03:49:50.041Z] 20261019034023335-908c54e8 — Implementation completed; verification required
+{
+  "summary": "Removed the example’s API-key gate and dotenv loading. All six fake-CLI tests and the unchanged syntax check pass. The new test verifies nine keyless calls, printed transcript, and saved judgment using temporary storage. No live generation ran. Evidence: .ralph/20261019034023335-908c54e8/iteration-2-implementation-evidence.md.",
+  "decisions": [
+    {
+      "decision": "Remove the obsolete credential gate and dotenv loading.",
+      "reason": "Allow the example to reach the existing Codex CLI backend without API-key variables."
+    },
+    {
+      "decision": "Reuse the fake Codex fixture and execute a temporary copy of the example.",
+      "reason": "Verify the complete entry point without live generation or touching existing debate_output.json."
+    }
+  ]
+}
+
+[2026-10-19T03:49:50.056Z] 20261019034023335-908c54e8 — Phase started
+{
+  "iteration": 2,
+  "phase": "verify"
+}
+
+[2026-10-19T03:49:50.100Z] 20261019034023335-908c54e8 — Check passed
+{
+  "iteration": 2,
+  "phase": "verify",
+  "command": "uv run --locked python -m py_compile examples/run_debate.py src/__init__.py src/agents.py src/codex_cli.py src/debate_graph.py src/models.py tests/test_codex_cli.py",
+  "log": "/home/leopard/development/jovis.ai/multi-agent-debate/.ralph/20261019034023335-908c54e8/2-verify-1792381790059-25-python-syntax.log"
+}
+
+[2026-10-19T03:49:51.621Z] 20261019034023335-908c54e8 — Check passed
+{
+  "iteration": 2,
+  "phase": "verify",
+  "command": "uv run --locked python -c import sys, unittest; suite = unittest.defaultTestLoader.discover(sys.argv[1]); count = suite.countTestCases(); result = unittest.TextTestRunner(verbosity=2).run(suite); sys.exit(0 if count > 0 and result.wasSuccessful() else 1) tests",
+  "log": "/home/leopard/development/jovis.ai/multi-agent-debate/.ralph/20261019034023335-908c54e8/2-verify-1792381790104-26-test-1.log"
+}
+
+[2026-10-19T03:49:51.626Z] 20261019034023335-908c54e8 — Verification decision
+{
+  "nextPhase": "review",
+  "failures": []
+}
+
+[2026-10-19T03:49:51.639Z] 20261019034023335-908c54e8 — Phase started
+{
+  "iteration": 2,
+  "phase": "review"
+}
+
+[2026-10-19T03:50:13.698Z] 20261019034023335-908c54e8 — Independent review decision
+{
+  "summary": "Reviewed the full diff against HEAD. No unresolved defects found in the selected increment.",
+  "acceptancePassed": true,
+  "acceptanceEvidence": [
+    "All six fake-CLI tests passed, including the five existing adapter tests.",
+    "The example test verifies nine inference calls with ANTHROPIC_API_KEY, OPENAI_API_KEY, and CODEX_API_KEY absent.",
+    "The example test checks all eight printed arguments and the printed and saved judgment, reasoning, and confidence.",
+    "The example runs from a temporary copy, keeping saved output in test-owned storage and leaving repository debate_output.json untouched.",
+    "The exact supplied, unchanged syntax check passed. No live generation ran."
+  ],
+  "userFacing": true,
+  "browserEvidence": [],
+  "findings": [],
+  "nextPhase": "commit",
+  "unresolved": []
+}
+
+[2026-10-19T03:50:13.711Z] 20261019034023335-908c54e8 — Phase started
+{
+  "iteration": 2,
+  "phase": "commit"
+}
+
+[2026-10-19T03:50:13.713Z] 20261019034023335-908c54e8 — Verified iteration approved for commit
+{
+  "iteration": 2,
+  "candidate": "Remove the example runner’s API-key gate",
+  "summary": "Removed the example’s API-key gate and dotenv loading. All six fake-CLI tests and the unchanged syntax check pass. The new test verifies nine keyless calls, printed transcript, and saved judgment using temporary storage. No live generation ran. Evidence: .ralph/20261019034023335-908c54e8/iteration-2-implementation-evidence.md.",
+  "decision": "Generate five new candidates after this commit",
+  "commitMessage": "ralph: Remove the example runner’s API-key gate\n\nRalph-Run: 20261019034023335-908c54e8\nRalph-Iteration: 2"
+}

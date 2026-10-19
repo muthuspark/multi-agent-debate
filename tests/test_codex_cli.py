@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -31,7 +32,13 @@ import sys
 args = sys.argv[1:]
 record = Path(os.environ["FAKE_CODEX_CALLS"])
 calls = json.loads(record.read_text()) if record.exists() else []
-calls.append({"args": args, "prompt": sys.stdin.read()})
+calls.append({
+    "args": args,
+    "prompt": sys.stdin.read(),
+    "api_keys_present": [key for key in
+                         ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY")
+                         if key in os.environ],
+})
 record.write_text(json.dumps(calls))
 print("CLI progress: this must never enter the debate transcript")
 print("CLI diagnostic", file=sys.stderr)
@@ -111,6 +118,49 @@ else:
         self.assertEqual(result, "Argument 1: café")
         args = self.calls()[0]["args"]
         self.assertEqual(args[args.index("--model") + 1], model)
+        self.assert_outputs_cleaned()
+
+    def test_example_entry_point_runs_keyless_and_saves_judgment(self):
+        project_root = Path(__file__).resolve().parent.parent
+        # Keep the script-relative output entirely inside test-owned storage.
+        script = self.root / "examples" / "run_debate.py"
+        script.parent.mkdir()
+        shutil.copyfile(project_root / "examples" / "run_debate.py", script)
+        (self.root / "codex").symlink_to(self.executable)
+        environment = os.environ.copy()
+        environment.update({
+            "PATH": str(self.root) + os.pathsep + environment.get("PATH", ""),
+            "PYTHONPATH": str(project_root),
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHON_DOTENV_DISABLED": "1",
+        })
+        completed = subprocess.run(
+            [sys.executable, str(script)], cwd=self.root, env=environment,
+            capture_output=True, text=True, encoding="utf-8", check=True,
+            timeout=30,
+        )
+        calls = self.calls()
+        self.assertEqual(len(calls), 9)
+        self.assertTrue(all(call["api_keys_present"] == [] for call in calls))
+        self.assertIn("Is blockchain technology essential", calls[0]["prompt"])
+        self.assertTrue(calls[-1]["prompt"].startswith("You are an impartial judge"))
+
+        saved_path = script.parent / "debate_output.json"
+        saved = json.loads(saved_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["final_judgment"], "Supported conclusion")
+        self.assertEqual(saved["reasoning"], "Both sides considered.")
+        self.assertEqual(saved["confidence"], 0.85)
+        self.assertEqual(len(saved["debate_log"]), 8)
+        self.assertIn("DEBATE TRANSCRIPT", completed.stdout)
+        for index, message in enumerate(saved["debate_log"], start=1):
+            self.assertEqual(message["message"], f"Argument {index}: café")
+            self.assertIn(f'{message["agent"]}:\n{message["message"]}', completed.stdout)
+        self.assertIn("FINAL JUDGMENT", completed.stdout)
+        self.assertIn("DECISION: Supported conclusion", completed.stdout)
+        self.assertIn("REASONING:\nBoth sides considered.", completed.stdout)
+        self.assertIn("CONFIDENCE: 0.85", completed.stdout)
+        self.assertIn(f"Full output saved to: {saved_path}", completed.stdout)
+        self.assertNotIn("CLI progress", completed.stdout)
         self.assert_outputs_cleaned()
 
     def test_default_executable_is_found_on_path(self):

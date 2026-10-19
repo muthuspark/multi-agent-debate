@@ -1,14 +1,12 @@
 """Example script demonstrating the multi-agent debate system."""
 
 import json
-import os
 from pathlib import Path
 
 # Add parent directory to path to import src
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dotenv import load_dotenv
 from src.debate_graph import DebateOrchestrator
 from src.models import DebateInput
 
@@ -41,15 +39,6 @@ def print_debate_output(output):
 
 def main():
     """Run example debates."""
-    # Load environment variables
-    load_dotenv()
-
-    # Check for API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        print("Error: ANTHROPIC_API_KEY not found in environment.")
-        print("Please create a .env file with your API key (see .env.example)")
-        return
-
     # Initialize the debate orchestrator
     print("Initializing debate orchestrator...")
     orchestrator = DebateOrchestrator()
