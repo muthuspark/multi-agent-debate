@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -35,9 +36,7 @@ calls = json.loads(record.read_text()) if record.exists() else []
 calls.append({
     "args": args,
     "prompt": sys.stdin.read(),
-    "api_keys_present": [key for key in
-                         ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY")
-                         if key in os.environ],
+    "api_keys_present": [key for key in os.environ if key.endswith("API_KEY")],
 })
 record.write_text(json.dumps(calls))
 print("CLI progress: this must never enter the debate transcript")
@@ -59,8 +58,9 @@ else:
         self.environment = patch.dict(os.environ, {"FAKE_CODEX_CALLS": str(self.calls_file)})
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY", "FAKE_CODEX_MODE"):
-            os.environ.pop(key, None)
+        for key in list(os.environ):
+            if key.endswith("API_KEY") or key == "FAKE_CODEX_MODE":
+                os.environ.pop(key, None)
 
     def calls(self):
         return json.loads(self.calls_file.read_text(encoding="utf-8"))
@@ -119,6 +119,53 @@ else:
         args = self.calls()[0]["args"]
         self.assertEqual(args[args.index("--model") + 1], model)
         self.assert_outputs_cleaned()
+
+    def test_readme_library_examples_run_keyless_with_default_and_overrides(self):
+        project_root = Path(__file__).resolve().parent.parent
+        examples = re.findall(
+            r"```python\n(.*?)```", (project_root / "README.md").read_text(), re.DOTALL
+        )
+        self.assertEqual(len(examples), 2, "Verify every README Python example")
+        (self.root / "codex").symlink_to(self.executable)
+        for index, example in enumerate(examples):
+            with self.subTest(example=index):
+                self.calls_file.write_text("[]")
+                environment = os.environ.copy()
+                environment.update({
+                    "PATH": str(self.root) + os.pathsep + environment.get("PATH", ""),
+                    "PYTHONPATH": str(project_root),
+                    "PYTHONIOENCODING": "utf-8",
+                    "DEBATE_MODEL": "test-codex-model",
+                    "DEBATE_CODEX_EXECUTABLE": str(self.executable),
+                })
+                completed = subprocess.run(
+                    [sys.executable, "-c", example +
+                     '\nprint("VERIFIED_RESULT=" + result.model_dump_json())'],
+                    cwd=self.root, env=environment, capture_output=True,
+                    text=True, encoding="utf-8", check=True, timeout=30,
+                )
+                result = DebateOutput.model_validate_json(
+                    completed.stdout.split("VERIFIED_RESULT=", 1)[1].strip()
+                )
+                self.assertEqual(result.final_judgment, "Supported conclusion")
+                self.assertEqual(result.reasoning, "Both sides considered.")
+                self.assertEqual(result.confidence, 0.85)
+                self.assertEqual([m.message for m in result.debate_log],
+                                 [f"Argument {i}: café" for i in range(1, 9)])
+                calls = self.calls()
+                self.assertEqual(len(calls), 9)
+                self.assertTrue(all(call["api_keys_present"] == [] for call in calls))
+                for call in calls:
+                    if index == 0:
+                        self.assertNotIn("--model", call["args"])
+                        self.assertIn("Is nuclear energy", call["prompt"])
+                        self.assertIn("Consider safety, cost", call["prompt"])
+                    else:
+                        args = call["args"]
+                        self.assertEqual(args[args.index("--model") + 1], "test-codex-model")
+                        self.assertIn("Should cities invest", call["prompt"])
+                        self.assertIn("Consider accessibility", call["prompt"])
+                self.assert_outputs_cleaned()
 
     def test_example_entry_point_runs_keyless_and_saves_judgment(self):
         project_root = Path(__file__).resolve().parent.parent
