@@ -1,11 +1,10 @@
 """LangGraph-based debate orchestration system."""
 
-import os
 import re
 from typing import Dict, Any, TypedDict, Annotated
 from operator import add
 
-from langchain_anthropic import ChatAnthropic
+from src.codex_cli import CodexCLI
 from langgraph.graph import StateGraph, END
 
 from src.models import DebateState, DebateMessage, DebateInput, DebateOutput, JudgmentResponse
@@ -39,23 +38,14 @@ class GraphState(TypedDict):
 class DebateOrchestrator:
     """Orchestrates a multi-agent debate using LangGraph."""
 
-    def __init__(self, api_key: str | None = None, model: str = "claude-3-5-sonnet-20241022"):
-        """Initialize the debate orchestrator.
+    def __init__(self, *, codex_executable: str = "codex", model: str | None = None):
+        """Initialize using Codex CLI's saved authentication; no API key is required.
 
         Args:
-            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
-            model: Claude model to use for all agents
+            codex_executable: Codex executable name or path.
+            model: Optional Codex model override; defaults to CLI configuration.
         """
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY must be set in environment or passed as argument")
-
-        self.model = model
-        self.llm = ChatAnthropic(
-            model=self.model,
-            api_key=self.api_key,
-            temperature=0.7,
-        )
+        self.llm = CodexCLI(executable=codex_executable, model=model)
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -100,8 +90,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_1_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {
             "agent1_opening": message,
@@ -115,8 +104,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_2_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {"agent2_opening": message}
         updates.update(self._add_to_log("Agent 2 (Philosophical)", message, 1))
@@ -127,8 +115,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_1_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {
             "agent1_rebuttal1": message,
@@ -142,8 +129,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_2_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {"agent2_rebuttal1": message}
         updates.update(self._add_to_log("Agent 2 (Philosophical)", message, 2))
@@ -154,8 +140,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_1_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {
             "agent1_rebuttal2": message,
@@ -169,8 +154,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_2_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {"agent2_rebuttal2": message}
         updates.update(self._add_to_log("Agent 2 (Philosophical)", message, 3))
@@ -181,8 +165,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_1_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {
             "agent1_conclusion": message,
@@ -196,8 +179,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_debater_2_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        message = response.content
+        message = self.llm.invoke(prompt)
 
         updates = {
             "agent2_conclusion": message,
@@ -211,8 +193,7 @@ class DebateOrchestrator:
         history = format_debate_history(state.get("debate_log", []))
         prompt = get_judge_prompt(state["question"], state.get("context"), history)
 
-        response = self.llm.invoke(prompt)
-        judge_response = response.content
+        judge_response = self.llm.invoke(prompt)
 
         # Parse the structured response
         judgment_match = re.search(r"JUDGMENT:\s*(.+?)(?=\n\nREASONING:|$)", judge_response, re.DOTALL)
